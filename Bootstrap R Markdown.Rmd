@@ -1,0 +1,124 @@
+---
+title: "BS9001 Research Experience: Bootstrap Preparation and Resampling Protocol"
+author: "Austin Chia Cheng En (U1740366A)"
+output:
+    rmdformats::material:
+      highlight: kate
+      code_folding: "hide"
+---
+
+# 1) Importing necessary libraries
+
+##### All the necessary libraries are first imported. `readr` for writing dataframes into csv files and `genefilter` for the `rowttests` function.
+
+```{r Calling Libraries, eval=FALSE}
+library(readr)
+library("genefilter")
+```
+
+# 2) Split dataframe into 2 classes - disease and control, taken from metadata
+
+###### The metadata of the GDS was accessed and columns 1 to 12 are for the control group and columns 38 to 49 are for the disease class (schizophrenia). The expression data of both groups were subsetted.
+
+```{r 2) Split dataframe into 2 classes - disease and control, taken from metadata, eval=FALSE}
+data <- read.csv("GDS3345_mean_df.csv", header = TRUE, stringsAsFactors =  FALSE, sep = ",")
+rownames(data) <- rownames(mean_df)
+data <- cbind(data[,1:12], data[,38:49])
+
+# control class - 1-12
+# disease class - 13-24
+
+```
+
+# 3) Appending binary significance t-test results to matrix, sampled 1000 times original loop
+
+##### A progress bar was first added through the "progress" package.
+
+##### A factor with the corresponding "normal" and "disease" classes was defined.
+
+##### Working input dataframe was coerced into a matrix for the rowttest function.
+
+##### An empty list was initialized to store output data from the loop.
+
+```{r 3) Appending binary significance t-test results to matrix, sampled 1000 times original loop, eval=FALSE}
+
+# Genefilter package method
+# BiocManager::install("genefilter")
+
+library(progress)
+pb <- progress_bar$new(total = 1000)
+fac <- c(rep("normal",4),rep("disease",4))
+data_mat <- as.matrix(data)
+boot_list <- list()
+
+for (i in 1:1000) 
+{
+  my_significant_genes <- c()
+  control <- as.matrix(sample(data[,1:12], size = 4, replace = TRUE))
+  disease <- as.matrix(sample(data[,13:24], size = 4, replace =TRUE))
+  m3 <- cbind(control, disease)
+  test_ttest <- rowttests(m3,fac = as.factor(fac))
+  my_significant_genes_v2 <- as.numeric(test_ttest$p.value < 0.05)
+  boot_list <- append(boot_list, list(my_significant_genes_v2))
+  
+  pb$tick()
+  Sys.sleep(1 / 1000)
+}
+
+```
+
+# 4) Transforming nested list into dataframe
+
+###### The nested list output derived from the `for` loop was coerced into a dataframe.
+
+```{r 4) Transforming nested list into dataframe, eval=FALSE}
+
+boot_df <- data.frame(matrix(unlist(boot_list), nrow=nrow(data), byrow=F),stringsAsFactors=FALSE)
+
+```
+
+# 5) Jaccard coefficient
+
+
+##### A Jaccard coefficient function was defined. A progress bar was included to view run progress.
+
+```{r 5) Defining a Jaccard coefficient function, eval=FALSE}
+jac_func <- function (x, y) 
+{
+  M_11 <- sum(x == 1 , y == 1)
+  M_10 <- sum(x == 1 , y == 0)
+  M_01 <- sum(x == 0 , y == 1)
+  return (M_11 / (M_11 + M_10 + M_01))
+}
+
+jac_df <- data.frame(matrix(data = NA, nrow = length(boot_df), ncol = length(boot_df)))
+
+pb <- progress_bar$new(total = 1000)
+
+```
+
+##### The Jaccard coefficients were assigned into a table through the use of a nested for loop. The bottom half of the table is not filled up, as the values will be a mirror image of those at the top half.
+```{r Assigning Jaccard coefficients into a table, eval=FALSE}
+for (r in 1:length(boot_df)) 
+  {
+  for (c in 1:length(boot_df)) 
+    {
+    if (c == r) {
+      jac_df[r,c] = 1
+    } else if (c > r) {
+      jac_df[r,c] = jac_func(boot_df[,r], boot_df[,c])
+    }
+  }
+  pb$tick()
+  Sys.sleep(1 / 1000)
+}
+
+variable_names <- sapply(boot_df, attr, "label")
+colnames(jac_df) <- paste0("S", seq(1:ncol(jac_df)))
+rownames(jac_df) <- paste0("S", seq(1:nrow(jac_df)))
+jac_mat <- matrix(jac_df)
+
+```
+
+
+

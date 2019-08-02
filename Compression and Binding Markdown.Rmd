@@ -1,0 +1,78 @@
+---
+title: "BS9001: Research Experience Compression and Binding"
+author: "Austin Chia Cheng En (U1740366A)"
+output:
+  rmdformats::material:
+    highlight: kate
+    code_folding: "hide"
+---
+
+# 1) Converting GDS dataset into `expressionset`
+
+##### The "GEOquery" library was imported first. The getGEO function from the GEOquery package was used to store the GDS dataset into a vector The GDS vector is then converted into an expression set through the use of the "GDS2eSet" function. The expression data is stored into a new vector.
+
+```{r 1) Converting into GDS dataset into expressionset, collapse = TRUE, eval= TRUE, results= 'hide', message=FALSE}
+library(GEOquery)
+GDS3345 <- getGEO("GDS3345", GSEMatrix=FALSE, AnnotGPL=FALSE, getGPL=TRUE)
+GDS3345_eset <- GDS2eSet(GDS3345)
+GDS3345_eset_exprs <- exprs(GDS3345_eset)
+
+```
+
+# 2) Renaming `Gene_Symbol` Column and combining with expression data
+
+##### The third column names were renamed "Gene_Symbol" and its feature data was stored into a new vector The expression data was stored into a dataframe. The expression data was bound to the respective genes.
+
+```{r 2) Renaming "Gene_Symbol" Column and combining with expression data, eval=FALSE, }
+colnames(fData(GDS3345_eset))[3] <- "Gene_Symbol"
+GDS3345_Gene_Symbol <- fData(GDS3345_eset)[3]
+GDS3345_df <- data.frame(GDS3345_eset_exprs)
+GDS3345_bound <- cbind(GDS3345_Gene_Symbol, GDS3345_df) # 12625 obs
+
+```
+
+# 3) Cleaning data
+
+##### The bound dataframe was cleaned from NA values and empty fields using the `is.na` function. 
+12625(initial number of genes) - 12181(final number of genes) = 444 missing values were removed
+
+##### Unique gene symbols are subsetted using the "unique" function
+
+```{r 3) Cleaning data, eval=FALSE}
+GDS3345_bound <- GDS3345_bound [!(is.na(GDS3345_bound$Gene_Symbol) | GDS3345_bound$Gene_Symbol == ""),]
+uniq_genesymb_GDS3345 <- unique(GDS3345_bound$Gene_Symbol)
+
+```
+
+# 4) Deriving expression means for each row
+
+##### An empty list is initialized for the loop output. A for loop is used to select out each row in the expression matrix and add into the initialized list.
+```{r 4) Deriving expression means for each row, eval=FALSE}
+data_list <- as.list(c())
+
+for (i in uniq_genesymb_GDS3345)
+{
+  data_subset <- subset(GDS3345_bound, Gene_Symbol == i, select = -c(1:2))
+  mat_subset <- as.matrix(data_subset)
+  data_list[[i]] <- mat_subset
+}
+
+```
+
+##### Applying the list of subsetted data with the colMeans function and converting the list into a transposed dataframe for storage
+
+##### The `colMeans` function was applied onto the list and stored as a dataframe. 
+```{r Appling the list of subsetted data with the colMeans function, eval=FALSE}
+
+means_list <- lapply(data_list, colMeans)
+mean_df <- data.frame(t(sapply(means_list, c)))
+
+```
+
+##### Writing the dataframe output as a csv file for further use
+
+```{r Writing the dataframe output as a csv file for further use, eval=FALSE}
+library(readr) # for reading csv on Mac
+write_csv(mean_df, path = "GDS3345_mean_df.csv", append = FALSE, col_names = TRUE)
+
+```
